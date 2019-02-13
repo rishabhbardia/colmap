@@ -32,9 +32,7 @@
 #define TEST_NAME "feature/sift_test"
 #include "util/testing.h"
 
-#include <QApplication>
 
-#include "SiftGPU/SiftGPU.h"
 #include "feature/sift.h"
 #include "feature/utils.h"
 #include "util/math.h"
@@ -190,55 +188,6 @@ BOOST_AUTO_TEST_CASE(TestExtractCovariantAffineDSPSiftFeaturesCPU) {
   }
 }
 
-BOOST_AUTO_TEST_CASE(TestExtractSiftFeaturesGPU) {
-  char app_name[] = "Test";
-  int argc = 1;
-  char* argv[] = {app_name};
-  QApplication app(argc, argv);
-
-  if (!OpenGLContextManager::HasOpenGL()) {
-    return;
-  }
-
-  class TestThread : public Thread {
-   private:
-    void Run() {
-      opengl_context_.MakeCurrent();
-
-      Bitmap bitmap;
-      CreateImageWithSquare(256, &bitmap);
-
-      SiftGPU sift_gpu;
-      BOOST_CHECK(CreateSiftGPUExtractor(SiftExtractionOptions(), &sift_gpu));
-
-      FeatureKeypoints keypoints;
-      FeatureDescriptors descriptors;
-      BOOST_CHECK(ExtractSiftFeaturesGPU(SiftExtractionOptions(), bitmap,
-                                         &sift_gpu, &keypoints, &descriptors));
-
-      BOOST_CHECK_EQUAL(keypoints.size(), 24);
-      for (size_t i = 0; i < keypoints.size(); ++i) {
-        BOOST_CHECK_GE(keypoints[i].x, 0);
-        BOOST_CHECK_GE(keypoints[i].y, 0);
-        BOOST_CHECK_LE(keypoints[i].x, bitmap.Width());
-        BOOST_CHECK_LE(keypoints[i].y, bitmap.Height());
-        BOOST_CHECK_GT(keypoints[i].ComputeScale(), 0);
-        BOOST_CHECK_GT(keypoints[i].ComputeOrientation(), -M_PI);
-        BOOST_CHECK_LT(keypoints[i].ComputeOrientation(), M_PI);
-      }
-
-      BOOST_CHECK_EQUAL(descriptors.rows(), 24);
-      for (FeatureDescriptors::Index i = 0; i < descriptors.rows(); ++i) {
-        BOOST_CHECK_LT(std::abs(descriptors.row(i).cast<float>().norm() - 512),
-                       1);
-      }
-    }
-    OpenGLContextManager opengl_context_;
-  };
-
-  TestThread thread;
-  RunThreadWithOpenGLContext(&thread);
-}
 
 FeatureDescriptors CreateRandomFeatureDescriptors(const size_t num_features) {
   SetPRNGSeed(0);
@@ -261,41 +210,7 @@ void CheckEqualMatches(const FeatureMatches& matches1,
   }
 }
 
-BOOST_AUTO_TEST_CASE(TestCreateSiftGPUMatcherOpenGL) {
-  char app_name[] = "Test";
-  int argc = 1;
-  char* argv[] = {app_name};
-  QApplication app(argc, argv);
 
-  if (!OpenGLContextManager::HasOpenGL()) {
-    return;
-  }
-
-  class TestThread : public Thread {
-   private:
-    void Run() {
-      opengl_context_.MakeCurrent();
-      SiftMatchGPU sift_match_gpu;
-      SiftMatchingOptions match_options;
-      match_options.max_num_matches = 1000;
-      BOOST_CHECK(CreateSiftGPUMatcher(match_options, &sift_match_gpu));
-    }
-    OpenGLContextManager opengl_context_;
-  };
-
-  TestThread thread;
-  RunThreadWithOpenGLContext(&thread);
-}
-
-BOOST_AUTO_TEST_CASE(TestCreateSiftGPUMatcherCUDA) {
-#ifdef CUDA_ENABLED
-  SiftMatchGPU sift_match_gpu;
-  SiftMatchingOptions match_options;
-  match_options.gpu_index = "0";
-  match_options.max_num_matches = 1000;
-  BOOST_CHECK(CreateSiftGPUMatcher(match_options, &sift_match_gpu));
-#endif
-}
 
 BOOST_AUTO_TEST_CASE(TestMatchSiftFeaturesCPU) {
   const FeatureDescriptors empty_descriptors =
@@ -370,80 +285,6 @@ BOOST_AUTO_TEST_CASE(TestMatchGuidedSiftFeaturesCPU) {
   BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches.size(), 0);
 }
 
-BOOST_AUTO_TEST_CASE(TestMatchSiftFeaturesGPU) {
-  char app_name[] = "Test";
-  int argc = 1;
-  char* argv[] = {app_name};
-  QApplication app(argc, argv);
-
-  if (!OpenGLContextManager::HasOpenGL()) {
-    return;
-  }
-
-  class TestThread : public Thread {
-   private:
-    void Run() {
-      opengl_context_.MakeCurrent();
-      SiftMatchGPU sift_match_gpu;
-      SiftMatchingOptions match_options;
-      match_options.max_num_matches = 1000;
-      BOOST_CHECK(CreateSiftGPUMatcher(match_options, &sift_match_gpu));
-
-      const FeatureDescriptors empty_descriptors =
-          CreateRandomFeatureDescriptors(0);
-      const FeatureDescriptors descriptors1 = CreateRandomFeatureDescriptors(2);
-      const FeatureDescriptors descriptors2 = descriptors1.colwise().reverse();
-
-      FeatureMatches matches;
-
-      MatchSiftFeaturesGPU(SiftMatchingOptions(), &descriptors1, &descriptors2,
-                           &sift_match_gpu, &matches);
-      BOOST_CHECK_EQUAL(matches.size(), 2);
-      BOOST_CHECK_EQUAL(matches[0].point2D_idx1, 0);
-      BOOST_CHECK_EQUAL(matches[0].point2D_idx2, 1);
-      BOOST_CHECK_EQUAL(matches[1].point2D_idx1, 1);
-      BOOST_CHECK_EQUAL(matches[1].point2D_idx2, 0);
-
-      MatchSiftFeaturesGPU(SiftMatchingOptions(), nullptr, nullptr,
-                           &sift_match_gpu, &matches);
-      BOOST_CHECK_EQUAL(matches.size(), 2);
-      BOOST_CHECK_EQUAL(matches[0].point2D_idx1, 0);
-      BOOST_CHECK_EQUAL(matches[0].point2D_idx2, 1);
-      BOOST_CHECK_EQUAL(matches[1].point2D_idx1, 1);
-      BOOST_CHECK_EQUAL(matches[1].point2D_idx2, 0);
-
-      MatchSiftFeaturesGPU(SiftMatchingOptions(), &descriptors1, nullptr,
-                           &sift_match_gpu, &matches);
-      BOOST_CHECK_EQUAL(matches.size(), 2);
-      BOOST_CHECK_EQUAL(matches[0].point2D_idx1, 0);
-      BOOST_CHECK_EQUAL(matches[0].point2D_idx2, 1);
-      BOOST_CHECK_EQUAL(matches[1].point2D_idx1, 1);
-      BOOST_CHECK_EQUAL(matches[1].point2D_idx2, 0);
-
-      MatchSiftFeaturesGPU(SiftMatchingOptions(), nullptr, &descriptors2,
-                           &sift_match_gpu, &matches);
-      BOOST_CHECK_EQUAL(matches.size(), 2);
-      BOOST_CHECK_EQUAL(matches[0].point2D_idx1, 0);
-      BOOST_CHECK_EQUAL(matches[0].point2D_idx2, 1);
-      BOOST_CHECK_EQUAL(matches[1].point2D_idx1, 1);
-      BOOST_CHECK_EQUAL(matches[1].point2D_idx2, 0);
-
-      MatchSiftFeaturesGPU(SiftMatchingOptions(), &empty_descriptors,
-                           &descriptors2, &sift_match_gpu, &matches);
-      BOOST_CHECK_EQUAL(matches.size(), 0);
-      MatchSiftFeaturesGPU(SiftMatchingOptions(), &descriptors1,
-                           &empty_descriptors, &sift_match_gpu, &matches);
-      BOOST_CHECK_EQUAL(matches.size(), 0);
-      MatchSiftFeaturesGPU(SiftMatchingOptions(), &empty_descriptors,
-                           &empty_descriptors, &sift_match_gpu, &matches);
-      BOOST_CHECK_EQUAL(matches.size(), 0);
-    }
-    OpenGLContextManager opengl_context_;
-  };
-
-  TestThread thread;
-  RunThreadWithOpenGLContext(&thread);
-}
 
 BOOST_AUTO_TEST_CASE(TestMatchSiftFeaturesCPUvsGPU) {
   char app_name[] = "Test";
@@ -577,102 +418,4 @@ BOOST_AUTO_TEST_CASE(TestMatchSiftFeaturesCPUvsGPU) {
   RunThreadWithOpenGLContext(&thread);
 }
 
-BOOST_AUTO_TEST_CASE(TestMatchGuidedSiftFeaturesGPU) {
-  char app_name[] = "Test";
-  int argc = 1;
-  char* argv[] = {app_name};
-  QApplication app(argc, argv);
 
-  if (!OpenGLContextManager::HasOpenGL()) {
-    return;
-  }
-
-  class TestThread : public Thread {
-   private:
-    void Run() {
-      opengl_context_.MakeCurrent();
-      SiftMatchGPU sift_match_gpu;
-      SiftMatchingOptions match_options;
-      match_options.max_num_matches = 1000;
-      BOOST_CHECK(CreateSiftGPUMatcher(match_options, &sift_match_gpu));
-
-      FeatureKeypoints empty_keypoints(0);
-      FeatureKeypoints keypoints1(2);
-      keypoints1[0].x = 1;
-      keypoints1[1].x = 2;
-      FeatureKeypoints keypoints2(2);
-      keypoints2[0].x = 2;
-      keypoints2[1].x = 1;
-      const FeatureDescriptors empty_descriptors =
-          CreateRandomFeatureDescriptors(0);
-      const FeatureDescriptors descriptors1 = CreateRandomFeatureDescriptors(2);
-      const FeatureDescriptors descriptors2 = descriptors1.colwise().reverse();
-
-      TwoViewGeometry two_view_geometry;
-      two_view_geometry.config = TwoViewGeometry::PLANAR_OR_PANORAMIC;
-      two_view_geometry.H = Eigen::Matrix3d::Identity();
-
-      MatchGuidedSiftFeaturesGPU(SiftMatchingOptions(), &keypoints1,
-                                 &keypoints2, &descriptors1, &descriptors2,
-                                 &sift_match_gpu, &two_view_geometry);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches.size(), 2);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[0].point2D_idx1, 0);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[0].point2D_idx2, 1);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[1].point2D_idx1, 1);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[1].point2D_idx2, 0);
-
-      MatchGuidedSiftFeaturesGPU(SiftMatchingOptions(), nullptr, nullptr,
-                                 nullptr, nullptr, &sift_match_gpu,
-                                 &two_view_geometry);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches.size(), 2);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[0].point2D_idx1, 0);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[0].point2D_idx2, 1);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[1].point2D_idx1, 1);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[1].point2D_idx2, 0);
-
-      MatchGuidedSiftFeaturesGPU(SiftMatchingOptions(), &keypoints1, nullptr,
-                                 &descriptors1, nullptr, &sift_match_gpu,
-                                 &two_view_geometry);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches.size(), 2);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[0].point2D_idx1, 0);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[0].point2D_idx2, 1);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[1].point2D_idx1, 1);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[1].point2D_idx2, 0);
-
-      MatchGuidedSiftFeaturesGPU(SiftMatchingOptions(), nullptr, &keypoints2,
-                                 nullptr, &descriptors2, &sift_match_gpu,
-                                 &two_view_geometry);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches.size(), 2);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[0].point2D_idx1, 0);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[0].point2D_idx2, 1);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[1].point2D_idx1, 1);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[1].point2D_idx2, 0);
-
-      keypoints1[0].x = 100;
-      MatchGuidedSiftFeaturesGPU(SiftMatchingOptions(), &keypoints1,
-                                 &keypoints2, &descriptors1, &descriptors2,
-                                 &sift_match_gpu, &two_view_geometry);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches.size(), 1);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[0].point2D_idx1, 1);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches[0].point2D_idx2, 0);
-
-      MatchGuidedSiftFeaturesGPU(SiftMatchingOptions(), &empty_keypoints,
-                                 &keypoints2, &empty_descriptors, &descriptors2,
-                                 &sift_match_gpu, &two_view_geometry);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches.size(), 0);
-      MatchGuidedSiftFeaturesGPU(
-          SiftMatchingOptions(), &keypoints1, &empty_keypoints, &descriptors1,
-          &empty_descriptors, &sift_match_gpu, &two_view_geometry);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches.size(), 0);
-      MatchGuidedSiftFeaturesGPU(SiftMatchingOptions(), &empty_keypoints,
-                                 &empty_keypoints, &empty_descriptors,
-                                 &empty_descriptors, &sift_match_gpu,
-                                 &two_view_geometry);
-      BOOST_CHECK_EQUAL(two_view_geometry.inlier_matches.size(), 0);
-    }
-    OpenGLContextManager opengl_context_;
-  };
-
-  TestThread thread;
-  RunThreadWithOpenGLContext(&thread);
-}

@@ -36,8 +36,6 @@
 #include "feature/types.h"
 #include "util/bitmap.h"
 
-class SiftGPU;
-class SiftMatchGPU;
 
 namespace colmap {
 
@@ -174,20 +172,7 @@ bool ExtractCovariantSiftFeaturesCPU(const SiftExtractionOptions& options,
                                      FeatureKeypoints* keypoints,
                                      FeatureDescriptors* descriptors);
 
-// Create a SiftGPU feature extractor. The same SiftGPU instance can be used to
-// extract features for multiple images. Note a OpenGL context must be made
-// current in the thread of the caller. If the gpu_index is not -1, the CUDA
-// version of SiftGPU is used, which produces slightly different results
-// than the OpenGL implementation.
-bool CreateSiftGPUExtractor(const SiftExtractionOptions& options,
-                            SiftGPU* sift_gpu);
 
-// Extract SIFT features for the given image on the GPU.
-// SiftGPU must already be initialized using `CreateSiftGPU`.
-bool ExtractSiftFeaturesGPU(const SiftExtractionOptions& options,
-                            const Bitmap& bitmap, SiftGPU* sift_gpu,
-                            FeatureKeypoints* keypoints,
-                            FeatureDescriptors* descriptors);
 
 // Load keypoints and descriptors from text file in the following format:
 //
@@ -222,28 +207,6 @@ void MatchGuidedSiftFeaturesCPU(const SiftMatchingOptions& match_options,
                                 const FeatureDescriptors& descriptors2,
                                 TwoViewGeometry* two_view_geometry);
 
-// Create a SiftGPU feature matcher. Note that if CUDA is not available or the
-// gpu_index is -1, the OpenGLContextManager must be created in the main thread
-// of the Qt application before calling this function. The same SiftMatchGPU
-// instance can be used to match features between multiple image pairs.
-bool CreateSiftGPUMatcher(const SiftMatchingOptions& match_options,
-                          SiftMatchGPU* sift_match_gpu);
-
-// Match the given SIFT features on the GPU. If either of the descriptors is
-// NULL, the keypoints/descriptors will not be uploaded and the previously
-// uploaded descriptors will be reused for the matching.
-void MatchSiftFeaturesGPU(const SiftMatchingOptions& match_options,
-                          const FeatureDescriptors* descriptors1,
-                          const FeatureDescriptors* descriptors2,
-                          SiftMatchGPU* sift_match_gpu,
-                          FeatureMatches* matches);
-void MatchGuidedSiftFeaturesGPU(const SiftMatchingOptions& match_options,
-                                const FeatureKeypoints* keypoints1,
-                                const FeatureKeypoints* keypoints2,
-                                const FeatureDescriptors* descriptors1,
-                                const FeatureDescriptors* descriptors2,
-                                SiftMatchGPU* sift_match_gpu,
-                                TwoViewGeometry* two_view_geometry);
 
 }  // namespace colmap
 

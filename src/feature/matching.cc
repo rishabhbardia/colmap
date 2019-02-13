@@ -34,7 +34,6 @@
 #include <fstream>
 #include <numeric>
 
-#include "SiftGPU/SiftGPU.h"
 #include "base/gps.h"
 #include "feature/utils.h"
 #include "retrieval/visual_index.h"
@@ -356,72 +355,8 @@ void SiftCPUFeatureMatcher::Run() {
   }
 }
 
-SiftGPUFeatureMatcher::SiftGPUFeatureMatcher(const SiftMatchingOptions& options,
-                                             FeatureMatcherCache* cache,
-                                             JobQueue<Input>* input_queue,
-                                             JobQueue<Output>* output_queue)
-    : FeatureMatcherThread(options, cache),
-      input_queue_(input_queue),
-      output_queue_(output_queue) {
-  CHECK(options_.Check());
 
-  prev_uploaded_image_ids_[0] = kInvalidImageId;
-  prev_uploaded_image_ids_[1] = kInvalidImageId;
 
-#ifndef CUDA_ENABLED
-  opengl_context_.reset(new OpenGLContextManager());
-#endif
-}
-
-void SiftGPUFeatureMatcher::Run() {
-#ifndef CUDA_ENABLED
-  CHECK(opengl_context_);
-  opengl_context_->MakeCurrent();
-#endif
-
-  SiftMatchGPU sift_match_gpu;
-  if (!CreateSiftGPUMatcher(options_, &sift_match_gpu)) {
-    std::cout << "ERROR: SiftGPU not fully supported" << std::endl;
-    SignalInvalidSetup();
-    return;
-  }
-
-  SignalValidSetup();
-
-  while (true) {
-    if (IsStopped()) {
-      break;
-    }
-
-    const auto input_job = input_queue_->Pop();
-    if (input_job.IsValid()) {
-      auto data = input_job.Data();
-
-      const FeatureDescriptors* descriptors1_ptr;
-      GetDescriptorData(0, data.image_id1, &descriptors1_ptr);
-      const FeatureDescriptors* descriptors2_ptr;
-      GetDescriptorData(1, data.image_id2, &descriptors2_ptr);
-      MatchSiftFeaturesGPU(options_, descriptors1_ptr, descriptors2_ptr,
-                           &sift_match_gpu, &data.matches);
-
-      CHECK(output_queue_->Push(data));
-    }
-  }
-}
-
-void SiftGPUFeatureMatcher::GetDescriptorData(
-    const int index, const image_t image_id,
-    const FeatureDescriptors** descriptors_ptr) {
-  CHECK_GE(index, 0);
-  CHECK_LE(index, 1);
-  if (prev_uploaded_image_ids_[index] == image_id) {
-    *descriptors_ptr = nullptr;
-  } else {
-    prev_uploaded_descriptors_[index] = cache_->GetDescriptors(image_id);
-    *descriptors_ptr = &prev_uploaded_descriptors_[index];
-    prev_uploaded_image_ids_[index] = image_id;
-  }
-}
 
 GuidedSiftCPUFeatureMatcher::GuidedSiftCPUFeatureMatcher(
     const SiftMatchingOptions& options, FeatureMatcherCache* cache,
@@ -461,86 +396,6 @@ void GuidedSiftCPUFeatureMatcher::Run() {
 
       CHECK(output_queue_->Push(data));
     }
-  }
-}
-
-GuidedSiftGPUFeatureMatcher::GuidedSiftGPUFeatureMatcher(
-    const SiftMatchingOptions& options, FeatureMatcherCache* cache,
-    JobQueue<Input>* input_queue, JobQueue<Output>* output_queue)
-    : FeatureMatcherThread(options, cache),
-      input_queue_(input_queue),
-      output_queue_(output_queue) {
-  CHECK(options_.Check());
-
-  prev_uploaded_image_ids_[0] = kInvalidImageId;
-  prev_uploaded_image_ids_[1] = kInvalidImageId;
-
-#ifndef CUDA_ENABLED
-  opengl_context_.reset(new OpenGLContextManager());
-#endif
-}
-
-void GuidedSiftGPUFeatureMatcher::Run() {
-#ifndef CUDA_ENABLED
-  CHECK(opengl_context_);
-  opengl_context_->MakeCurrent();
-#endif
-
-  SiftMatchGPU sift_match_gpu;
-  if (!CreateSiftGPUMatcher(options_, &sift_match_gpu)) {
-    std::cout << "ERROR: SiftGPU not fully supported" << std::endl;
-    SignalInvalidSetup();
-    return;
-  }
-
-  SignalValidSetup();
-
-  while (true) {
-    if (IsStopped()) {
-      break;
-    }
-
-    const auto input_job = input_queue_->Pop();
-    if (input_job.IsValid()) {
-      auto data = input_job.Data();
-
-      if (data.two_view_geometry.inlier_matches.size() <
-          static_cast<size_t>(options_.min_num_inliers)) {
-        CHECK(output_queue_->Push(data));
-        continue;
-      }
-
-      const FeatureDescriptors* descriptors1_ptr;
-      const FeatureKeypoints* keypoints1_ptr;
-      GetFeatureData(0, data.image_id1, &keypoints1_ptr, &descriptors1_ptr);
-      const FeatureDescriptors* descriptors2_ptr;
-      const FeatureKeypoints* keypoints2_ptr;
-      GetFeatureData(1, data.image_id2, &keypoints2_ptr, &descriptors2_ptr);
-
-      MatchGuidedSiftFeaturesGPU(options_, keypoints1_ptr, keypoints2_ptr,
-                                 descriptors1_ptr, descriptors2_ptr,
-                                 &sift_match_gpu, &data.two_view_geometry);
-
-      CHECK(output_queue_->Push(data));
-    }
-  }
-}
-
-void GuidedSiftGPUFeatureMatcher::GetFeatureData(
-    const int index, const image_t image_id,
-    const FeatureKeypoints** keypoints_ptr,
-    const FeatureDescriptors** descriptors_ptr) {
-  CHECK_GE(index, 0);
-  CHECK_LE(index, 1);
-  if (prev_uploaded_image_ids_[index] == image_id) {
-    *keypoints_ptr = nullptr;
-    *descriptors_ptr = nullptr;
-  } else {
-    prev_uploaded_keypoints_[index] = cache_->GetKeypoints(image_id);
-    prev_uploaded_descriptors_[index] = cache_->GetDescriptors(image_id);
-    *keypoints_ptr = &prev_uploaded_keypoints_[index];
-    *descriptors_ptr = &prev_uploaded_descriptors_[index];
-    prev_uploaded_image_ids_[index] = image_id;
   }
 }
 
@@ -626,13 +481,7 @@ SiftFeatureMatcher::SiftFeatureMatcher(const SiftMatchingOptions& options,
 #endif  // CUDA_ENABLED
 
   if (options_.use_gpu) {
-    auto gpu_options = options_;
-    matchers_.reserve(gpu_indices.size());
-    for (const auto& gpu_index : gpu_indices) {
-      gpu_options.gpu_index = std::to_string(gpu_index);
-      matchers_.emplace_back(new SiftGPUFeatureMatcher(
-          gpu_options, cache, &matcher_queue_, &verifier_queue_));
-    }
+    throw std::runtime_error("no gpu");
   } else {
     matchers_.reserve(num_threads);
     for (int i = 0; i < num_threads; ++i) {
@@ -649,13 +498,8 @@ SiftFeatureMatcher::SiftFeatureMatcher(const SiftMatchingOptions& options,
     }
 
     if (options_.use_gpu) {
-      auto gpu_options = options_;
-      guided_matchers_.reserve(gpu_indices.size());
-      for (const auto& gpu_index : gpu_indices) {
-        gpu_options.gpu_index = std::to_string(gpu_index);
-        guided_matchers_.emplace_back(new GuidedSiftGPUFeatureMatcher(
-            gpu_options, cache, &guided_matcher_queue_, &output_queue_));
-      }
+      throw std::runtime_error("no gpu");
+     
     } else {
       guided_matchers_.reserve(num_threads);
       for (int i = 0; i < num_threads; ++i) {
