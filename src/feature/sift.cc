@@ -47,11 +47,6 @@
 namespace colmap {
 namespace {
 
-// Mutexes that ensure that only one thread extracts/matches on the same GPU
-// at the same time, since SiftGPU internally uses static variables.
-static std::map<int, std::unique_ptr<std::mutex>> sift_extraction_mutexes;
-static std::map<int, std::unique_ptr<std::mutex>> sift_matching_mutexes;
-
 // VLFeat uses a different convention to store its descriptors. This transforms
 // the VLFeat format into the original SIFT format that is also used by SiftGPU.
 FeatureDescriptors TransformVLFeatToUBCFeatureDescriptors(
