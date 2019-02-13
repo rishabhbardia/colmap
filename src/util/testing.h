@@ -42,6 +42,6 @@
 
 #define BOOST_TEST_MODULE TEST_NAME
 
-#include <boost/test/unit_test.hpp>
+#include <boost/test/included/unit_test.hpp>
 
 #endif  // COLMAP_SRC_UTIL_TESTING_H_
