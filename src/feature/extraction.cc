@@ -33,7 +33,7 @@
 
 #include <numeric>
 
-#include "SiftGPU/SiftGPU.h"
+//#include "SiftGPU/SiftGPU.h"
 #include "feature/sift.h"
 #include "util/cuda.h"
 #include "util/misc.h"
@@ -343,21 +343,6 @@ SiftFeatureExtractorThread::SiftFeatureExtractorThread(
 }
 
 void SiftFeatureExtractorThread::Run() {
-  std::unique_ptr<SiftGPU> sift_gpu;
-  if (sift_options_.use_gpu) {
-#ifndef CUDA_ENABLED
-    CHECK(opengl_context_);
-    opengl_context_->MakeCurrent();
-#endif
-
-    sift_gpu.reset(new SiftGPU);
-    if (!CreateSiftGPUExtractor(sift_options_, sift_gpu.get())) {
-      std::cerr << "ERROR: SiftGPU not fully supported." << std::endl;
-      SignalInvalidSetup();
-      return;
-    }
-  }
-
   SignalValidSetup();
 
   while (true) {
@@ -377,9 +362,7 @@ void SiftFeatureExtractorThread::Run() {
               sift_options_, image_data.bitmap, &image_data.keypoints,
               &image_data.descriptors);
         } else if (sift_options_.use_gpu) {
-          success = ExtractSiftFeaturesGPU(
-              sift_options_, image_data.bitmap, sift_gpu.get(),
-              &image_data.keypoints, &image_data.descriptors);
+          throw std::runtime_error("no gpu");
         } else {
           success = ExtractSiftFeaturesCPU(sift_options_, image_data.bitmap,
                                            &image_data.keypoints,
