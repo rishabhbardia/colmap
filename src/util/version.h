@@ -36,10 +36,10 @@
 
 namespace colmap {
 
-const static std::string COLMAP_VERSION = "${COLMAP_VERSION}";
-const static int COLMAP_VERSION_NUMBER = ${COLMAP_VERSION_NUMBER};
-const static std::string COLMAP_COMMIT_ID = "${GIT_COMMIT_ID}";
-const static std::string COLMAP_COMMIT_DATE = "${GIT_COMMIT_DATE}";
+const static std::string COLMAP_VERSION = "FORKED";
+const static int COLMAP_VERSION_NUMBER = 1;
+const static std::string COLMAP_COMMIT_ID = "FORKED_COMMIT_ID";
+const static std::string COLMAP_COMMIT_DATE = "$FORKED_COMMIT_DATE";
 
 std::string GetVersionInfo();
 
