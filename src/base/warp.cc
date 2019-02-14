@@ -31,7 +31,7 @@
 
 #include "base/warp.h"
 
-#include "VLFeat/imopv.h"
+#include "third-party/vl/imopv.h"
 #include "util/logging.h"
 
 namespace colmap {

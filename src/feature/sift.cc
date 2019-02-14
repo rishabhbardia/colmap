@@ -35,8 +35,8 @@
 #include <fstream>
 #include <memory>
 
-#include "VLFeat/covdet.h"
-#include "VLFeat/sift.h"
+#include "third-party/vl/covdet.h"
+#include "third-party/vl/sift.h"
 #include "feature/utils.h"
 #include "util/cuda.h"
 #include "util/logging.h"

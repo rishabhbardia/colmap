@@ -37,7 +37,7 @@
 #include <boost/regex.hpp>
 
 #include "base/camera_database.h"
-#include "VLFeat/imopv.h"
+#include "third-party/vl/imopv.h"
 #include "util/logging.h"
 #include "util/math.h"
 #include "util/misc.h"
