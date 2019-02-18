@@ -35,7 +35,7 @@
 #include <boost/heap/fibonacci_heap.hpp>
 #include <Eigen/Core>
 
-#include "FLANN/flann.hpp"
+#include "flann/flann.hpp"
 #include "feature/types.h"
 #include "retrieval/inverted_file.h"
 #include "retrieval/inverted_index.h"
