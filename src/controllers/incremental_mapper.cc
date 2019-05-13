@@ -48,28 +48,29 @@ size_t TriangulateImage(const IncrementalMapperOptions& options,
 
 void AdjustGlobalBundle(const IncrementalMapperOptions& options,
                         IncrementalMapper* mapper) {
-  BundleAdjustmentOptions custom_options = options.GlobalBundleAdjustment();
+  BundleAdjustmentOptions custom_ba_options = options.GlobalBundleAdjustment();
 
   const size_t num_reg_images = mapper->GetReconstruction().NumRegImages();
 
   // Use stricter convergence criteria for first registered images.
-  const size_t kMinNumRegImages = 10;
-  if (num_reg_images < kMinNumRegImages) {
-    custom_options.solver_options.function_tolerance /= 10;
-    custom_options.solver_options.gradient_tolerance /= 10;
-    custom_options.solver_options.parameter_tolerance /= 10;
-    custom_options.solver_options.max_num_iterations *= 2;
-    custom_options.solver_options.max_linear_solver_iterations = 200;
+  const size_t kMinNumRegImagesForFastBA = 10;
+  if (num_reg_images < kMinNumRegImagesForFastBA) {
+    custom_ba_options.solver_options.function_tolerance /= 10;
+    custom_ba_options.solver_options.gradient_tolerance /= 10;
+    custom_ba_options.solver_options.parameter_tolerance /= 10;
+    custom_ba_options.solver_options.max_num_iterations *= 2;
+    custom_ba_options.solver_options.max_linear_solver_iterations = 200;
   }
 
   PrintHeading1("Global bundle adjustment");
-  if (options.ba_global_use_pba && num_reg_images >= kMinNumRegImages &&
-      ParallelBundleAdjuster::IsSupported(custom_options,
+  if (options.ba_global_use_pba && !options.fix_existing_images &&
+      num_reg_images >= kMinNumRegImagesForFastBA &&
+      ParallelBundleAdjuster::IsSupported(custom_ba_options,
                                           mapper->GetReconstruction())) {
     mapper->AdjustParallelGlobalBundle(
-        custom_options, options.ParallelGlobalBundleAdjustment());
+        custom_ba_options, options.ParallelGlobalBundleAdjustment());
   } else {
-    mapper->AdjustGlobalBundle(custom_options);
+    mapper->AdjustGlobalBundle(options.Mapper(), custom_ba_options);
   }
 }
 
@@ -195,6 +196,7 @@ IncrementalMapper::Options IncrementalMapperOptions::Mapper() const {
   options.max_extra_param = max_extra_param;
   options.num_threads = num_threads;
   options.local_ba_num_images = ba_local_num_images;
+  options.fix_existing_images = fix_existing_images;
   return options;
 }
 
@@ -336,12 +338,23 @@ void IncrementalMapperController::Run() {
 bool IncrementalMapperController::LoadDatabase() {
   PrintHeading1("Loading database");
 
+  // Make sure images of the given reconstruction are also included when
+  // manually specifying images for the reconstrunstruction procedure.
+  std::unordered_set<std::string> image_names = options_->image_names;
+  if (reconstruction_manager_->Size() == 1 && !options_->image_names.empty()) {
+    const Reconstruction& reconstruction = reconstruction_manager_->Get(0);
+    for (const image_t image_id : reconstruction.RegImageIds()) {
+      const auto& image = reconstruction.Image(image_id);
+      image_names.insert(image.Name());
+    }
+  }
+
   Database database(database_path_);
   Timer timer;
   timer.Start();
   const size_t min_num_matches = static_cast<size_t>(options_->min_num_matches);
   database_cache_.Load(database, min_num_matches, options_->ignore_watermarks,
-                       options_->image_names);
+                       image_names);
   std::cout << std::endl;
   timer.PrintMinutes();
 

@@ -54,7 +54,7 @@ void DatabaseCache::AddImage(const class Image& image) {
 
 void DatabaseCache::Load(const Database& database, const size_t min_num_matches,
                          const bool ignore_watermarks,
-                         const std::set<std::string>& image_names) {
+                         const std::unordered_set<std::string>& image_names) {
   //////////////////////////////////////////////////////////////////////////////
   // Load cameras
   //////////////////////////////////////////////////////////////////////////////
@@ -201,6 +201,16 @@ void DatabaseCache::Load(const Database& database, const size_t min_num_matches,
   std::cout << StringPrintf(" in %.3fs (ignored %d)", timer.ElapsedSeconds(),
                             num_ignored_image_pairs)
             << std::endl;
+}
+
+const class Image* DatabaseCache::FindImageWithName(
+    const std::string& name) const {
+  for (const auto& image : images_) {
+    if (image.second.Name() == name) {
+      return &image.second;
+    }
+  }
+  return nullptr;
 }
 
 }  // namespace colmap

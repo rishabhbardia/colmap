@@ -225,6 +225,30 @@ int RunDatabaseCreator(int argc, char** argv) {
   return EXIT_SUCCESS;
 }
 
+int RunDatabaseMerger(int argc, char** argv) {
+  std::string database_path1;
+  std::string database_path2;
+  std::string merged_database_path;
+
+  OptionManager options;
+  options.AddRequiredOption("database_path1", &database_path1);
+  options.AddRequiredOption("database_path2", &database_path2);
+  options.AddRequiredOption("merged_database_path", &merged_database_path);
+  options.Parse(argc, argv);
+
+  if (ExistsFile(merged_database_path)) {
+    std::cout << "ERROR: Merged database file must not exist." << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  Database database1(database_path1);
+  Database database2(database_path2);
+  Database merged_database(merged_database_path);
+  Database::Merge(database1, database2, &merged_database);
+
+  return EXIT_SUCCESS;
+}
+
 int RunStereoFuser(int argc, char** argv) {
   std::string workspace_path;
   std::string input_type = "geometric";
@@ -284,6 +308,36 @@ int RunPoissonMesher(int argc, char** argv) {
   options.Parse(argc, argv);
 
   CHECK(mvs::PoissonMeshing(*options.poisson_meshing, input_path, output_path));
+
+  return EXIT_SUCCESS;
+}
+
+int RunProjectGenerator(int argc, char** argv) {
+  std::string output_path;
+  std::string quality = "high";
+
+  OptionManager options;
+  options.AddRequiredOption("output_path", &output_path);
+  options.AddDefaultOption("quality", &quality, "{low, medium, high, extreme}");
+  options.Parse(argc, argv);
+
+  OptionManager output_options;
+  output_options.AddAllOptions();
+
+  StringToLower(&quality);
+  if (quality == "low") {
+    output_options.ModifyForLowQuality();
+  } else if (quality == "medium") {
+    output_options.ModifyForMediumQuality();
+  } else if (quality == "high") {
+    output_options.ModifyForHighQuality();
+  } else if (quality == "extreme") {
+    output_options.ModifyForExtremeQuality();
+  } else {
+    LOG(FATAL) << "Invalid quality provided";
+  }
+
+  output_options.Write(output_path);
 
   return EXIT_SUCCESS;
 }
@@ -601,6 +655,55 @@ int RunImageDeleter(int argc, char** argv) {
   return EXIT_SUCCESS;
 }
 
+int RunImageFilterer(int argc, char** argv) {
+  std::string input_path;
+  std::string output_path;
+  double min_focal_length_ratio = 0.1;
+  double max_focal_length_ratio = 10.0;
+  double max_extra_param = 100.0;
+  size_t min_num_observations = 10;
+
+  OptionManager options;
+  options.AddRequiredOption("input_path", &input_path);
+  options.AddRequiredOption("output_path", &output_path);
+  options.AddDefaultOption("min_focal_length_ratio", &min_focal_length_ratio);
+  options.AddDefaultOption("max_focal_length_ratio", &max_focal_length_ratio);
+  options.AddDefaultOption("max_extra_param", &max_extra_param);
+  options.AddDefaultOption("min_num_observations", &min_num_observations);
+  options.Parse(argc, argv);
+
+  Reconstruction reconstruction;
+  reconstruction.Read(input_path);
+
+  const size_t num_reg_images = reconstruction.NumRegImages();
+
+  reconstruction.FilterImages(min_focal_length_ratio, max_focal_length_ratio,
+                              max_extra_param);
+
+  std::vector<image_t> filtered_image_ids;
+  for (const auto& image : reconstruction.Images()) {
+    if (image.second.IsRegistered() &&
+        image.second.NumPoints3D() < min_num_observations) {
+      filtered_image_ids.push_back(image.first);
+    }
+  }
+
+  for (const auto image_id : filtered_image_ids) {
+    reconstruction.DeRegisterImage(image_id);
+  }
+
+  const size_t num_filtered_images =
+      num_reg_images - reconstruction.NumRegImages();
+
+  std::cout << StringPrintf("Filtered %d images from a total of %d images",
+                            num_filtered_images, num_reg_images)
+            << std::endl;
+
+  reconstruction.Write(output_path);
+
+  return EXIT_SUCCESS;
+}
+
 int RunImageRectifier(int argc, char** argv) {
   std::string input_path;
   std::string output_path;
@@ -785,7 +888,7 @@ int RunMapper(int argc, char** argv) {
   if (!image_list_path.empty()) {
     const auto image_names = ReadTextFileLines(image_list_path);
     options.mapper->image_names =
-        std::set<std::string>(image_names.begin(), image_names.end());
+        std::unordered_set<std::string>(image_names.begin(), image_names.end());
   }
 
   ReconstructionManager reconstruction_manager;
@@ -1245,12 +1348,16 @@ int RunPointFiltering(int argc, char** argv) {
 int RunPointTriangulator(int argc, char** argv) {
   std::string input_path;
   std::string output_path;
+  bool clear_points = false;
 
   OptionManager options;
   options.AddDatabaseOptions();
   options.AddImageOptions();
   options.AddRequiredOption("input_path", &input_path);
   options.AddRequiredOption("output_path", &output_path);
+  options.AddDefaultOption(
+      "clear_points", &clear_points,
+      "Whether to clear all existing points and observations");
   options.AddMapperOptions();
   options.Parse(argc, argv);
 
@@ -1266,27 +1373,37 @@ int RunPointTriangulator(int argc, char** argv) {
 
   const auto& mapper_options = *options.mapper;
 
+  PrintHeading1("Loading model");
+
+  Reconstruction reconstruction;
+  reconstruction.Read(input_path);
+
   PrintHeading1("Loading database");
 
   DatabaseCache database_cache;
 
   {
-    Database database(*options.database_path);
     Timer timer;
     timer.Start();
+
+    Database database(*options.database_path);
+
     const size_t min_num_matches =
         static_cast<size_t>(mapper_options.min_num_matches);
     database_cache.Load(database, min_num_matches,
                         mapper_options.ignore_watermarks,
                         mapper_options.image_names);
+
+    if (clear_points) {
+      reconstruction.DeleteAllPoints2DAndPoints3D();
+      reconstruction.TranscribeImageIdsToDatabase(database);
+    }
+
     std::cout << std::endl;
     timer.PrintMinutes();
   }
 
   std::cout << std::endl;
-
-  Reconstruction reconstruction;
-  reconstruction.Read(input_path);
 
   CHECK_GE(reconstruction.NumRegImages(), 2)
       << "Need at least two images for triangulation";
@@ -1300,14 +1417,18 @@ int RunPointTriangulator(int argc, char** argv) {
 
   const auto tri_options = mapper_options.Triangulation();
 
-  for (const image_t image_id : reconstruction.RegImageIds()) {
+  const auto& reg_image_ids = reconstruction.RegImageIds();
+
+  for (size_t i = 0; i < reg_image_ids.size(); ++i) {
+    const image_t image_id = reg_image_ids[i];
+
     const auto& image = reconstruction.Image(image_id);
 
-    PrintHeading1("Triangulating image #" + std::to_string(image_id));
+    PrintHeading1(StringPrintf("Triangulating image #%d (%d)", image_id, i));
 
     const size_t num_existing_points3D = image.NumPoints3D();
 
-    std::cout << "  => Image has " << num_existing_points3D << " / "
+    std::cout << "  => Image sees " << num_existing_points3D << " / "
               << image.NumObservations() << " points" << std::endl;
 
     mapper.TriangulateImage(tri_options, image_id);
@@ -1318,19 +1439,27 @@ int RunPointTriangulator(int argc, char** argv) {
   }
 
   //////////////////////////////////////////////////////////////////////////////
-  // Bundle adjustment
+  // Retriangulation
   //////////////////////////////////////////////////////////////////////////////
+
+  PrintHeading1("Retriangulation");
 
   CompleteAndMergeTracks(mapper_options, &mapper);
 
-  const auto ba_options = mapper_options.GlobalBundleAdjustment();
+  //////////////////////////////////////////////////////////////////////////////
+  // Bundle adjustment
+  //////////////////////////////////////////////////////////////////////////////
+
+  auto ba_options = mapper_options.GlobalBundleAdjustment();
+  ba_options.refine_focal_length = false;
+  ba_options.refine_principal_point = false;
+  ba_options.refine_extra_params = false;
+  ba_options.refine_extrinsics = false;
 
   // Configure bundle adjustment.
   BundleAdjustmentConfig ba_config;
   for (const image_t image_id : reconstruction.RegImageIds()) {
     ba_config.AddImage(image_id);
-    ba_config.SetConstantPose(image_id);
-    ba_config.SetConstantCamera(reconstruction.Image(image_id).CameraId());
   }
 
   for (int i = 0; i < mapper_options.ba_global_max_refinements; ++i) {
@@ -1884,12 +2013,14 @@ int main(int argc, char** argv) {
   commands.emplace_back("bundle_adjuster", &RunBundleAdjuster);
   commands.emplace_back("color_extractor", &RunColorExtractor);
   commands.emplace_back("database_creator", &RunDatabaseCreator);
+  commands.emplace_back("database_merger", &RunDatabaseMerger);
   commands.emplace_back("delaunay_mesher", &RunDelaunayMesher);
   commands.emplace_back("exhaustive_matcher", &RunExhaustiveMatcher);
   commands.emplace_back("feature_extractor", &RunFeatureExtractor);
   commands.emplace_back("feature_importer", &RunFeatureImporter);
   commands.emplace_back("hierarchical_mapper", &RunHierarchicalMapper);
   commands.emplace_back("image_deleter", &RunImageDeleter);
+  commands.emplace_back("image_filterer", &RunImageFilterer);
   commands.emplace_back("image_rectifier", &RunImageRectifier);
   commands.emplace_back("image_registrator", &RunImageRegistrator);
   commands.emplace_back("image_undistorter", &RunImageUndistorter);
@@ -1905,6 +2036,7 @@ int main(int argc, char** argv) {
   commands.emplace_back("point_filtering", &RunPointFiltering);
   commands.emplace_back("point_triangulator", &RunPointTriangulator);
   commands.emplace_back("poisson_mesher", &RunPoissonMesher);
+  commands.emplace_back("project_generator", &RunProjectGenerator);
   commands.emplace_back("rig_bundle_adjuster", &RunRigBundleAdjuster);
   commands.emplace_back("sequential_matcher", &RunSequentialMatcher);
   commands.emplace_back("spatial_matcher", &RunSpatialMatcher);
