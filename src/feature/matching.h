@@ -223,6 +223,17 @@ class FeatureMatcherThread : public Thread {
   FeatureMatcherCache* cache_;
 };
 
+class FeatureMatcherThreadFactory {
+  public:
+  // Could change this to be more elegant. Leaving this way for mergeability.
+  typedef internal::FeatureMatcherData Input;
+  typedef internal::FeatureMatcherData Output;
+  virtual FeatureMatcherThread* newThread(const SiftMatchingOptions& options,
+                                          FeatureMatcherCache* cache,
+                                          JobQueue<Input>* input_queue,
+                                          JobQueue<Output>* output_queue) const = 0;
+};
+
 class SiftCPUFeatureMatcher : public FeatureMatcherThread {
  public:
   typedef internal::FeatureMatcherData Input;
@@ -339,7 +350,8 @@ class TwoViewGeometryVerifier : public Thread {
 class SiftFeatureMatcher {
  public:
   SiftFeatureMatcher(const SiftMatchingOptions& options, Database* database,
-                     FeatureMatcherCache* cache);
+                     FeatureMatcherCache* cache, 
+                     const FeatureMatcherThreadFactory* thread_factory = nullptr);
 
   ~SiftFeatureMatcher();
 
@@ -353,6 +365,7 @@ class SiftFeatureMatcher {
   SiftMatchingOptions options_;
   Database* database_;
   FeatureMatcherCache* cache_;
+  FeatureMatcherThreadFactory* thread_factory_;
 
   bool is_setup_;
 
@@ -428,7 +441,8 @@ class SequentialFeatureMatcher : public Thread {
  public:
   SequentialFeatureMatcher(const SequentialMatchingOptions& options,
                            const SiftMatchingOptions& match_options,
-                           const std::string& database_path);
+                           const std::string& database_path,
+                           const FeatureMatcherThreadFactory* thread_factory = nullptr);
 
  private:
   void Run() override;
