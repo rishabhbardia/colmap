@@ -461,7 +461,8 @@ void TwoViewGeometryVerifier::Run() {
 
 SiftFeatureMatcher::SiftFeatureMatcher(const SiftMatchingOptions& options,
                                        Database* database,
-                                       FeatureMatcherCache* cache)
+                                       FeatureMatcherCache* cache,
+                                       const FeatureMatcherThreadFactory* thread_factory)
     : options_(options), database_(database), cache_(cache), is_setup_(false) {
   CHECK(options_.Check());
 
@@ -485,8 +486,15 @@ SiftFeatureMatcher::SiftFeatureMatcher(const SiftMatchingOptions& options,
   } else {
     matchers_.reserve(num_threads);
     for (int i = 0; i < num_threads; ++i) {
-      matchers_.emplace_back(new SiftCPUFeatureMatcher(
-          options_, cache, &matcher_queue_, &verifier_queue_));
+      // Left a bit crude to facilitate merging upstream.
+      if (thread_factory) {
+        matchers_.emplace_back(
+            thread_factory->newThread(
+              options_, cache, &matcher_queue_, &verifier_queue_));
+      } else {
+        matchers_.emplace_back(new SiftCPUFeatureMatcher(
+              options_, cache, &matcher_queue_, &verifier_queue_));
+      }
     }
   }
 
@@ -757,14 +765,15 @@ void ExhaustiveFeatureMatcher::Run() {
 
 SequentialFeatureMatcher::SequentialFeatureMatcher(
     const SequentialMatchingOptions& options,
-    const SiftMatchingOptions& match_options, const std::string& database_path)
+    const SiftMatchingOptions& match_options, const std::string& database_path,
+    const FeatureMatcherThreadFactory* thread_factory)
     : options_(options),
       match_options_(match_options),
       database_(database_path),
       cache_(std::max(5 * options_.loop_detection_num_images,
                       5 * options_.overlap),
              &database_),
-      matcher_(match_options, &database_, &cache_) {
+      matcher_(match_options, &database_, &cache_, thread_factory) {
   CHECK(options_.Check());
   CHECK(match_options_.Check());
 }
