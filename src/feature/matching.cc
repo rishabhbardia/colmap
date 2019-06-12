@@ -689,12 +689,13 @@ void SiftFeatureMatcher::Match(
 
 ExhaustiveFeatureMatcher::ExhaustiveFeatureMatcher(
     const ExhaustiveMatchingOptions& options,
-    const SiftMatchingOptions& match_options, const std::string& database_path)
+    const SiftMatchingOptions& match_options, const std::string& database_path,
+    const FeatureMatcherThreadFactory* thread_factory)
     : options_(options),
       match_options_(match_options),
       database_(database_path),
       cache_(5 * options_.block_size, &database_),
-      matcher_(match_options, &database_, &cache_) {
+      matcher_(match_options, &database_, &cache_, thread_factory) {
   CHECK(options_.Check());
   CHECK(match_options_.Check());
 }
@@ -897,12 +898,13 @@ void SequentialFeatureMatcher::RunLoopDetection(
 
 VocabTreeFeatureMatcher::VocabTreeFeatureMatcher(
     const VocabTreeMatchingOptions& options,
-    const SiftMatchingOptions& match_options, const std::string& database_path)
+    const SiftMatchingOptions& match_options, const std::string& database_path,
+    const FeatureMatcherThreadFactory* thread_factory)
     : options_(options),
       match_options_(match_options),
       database_(database_path),
       cache_(5 * options_.num_images, &database_),
-      matcher_(match_options, &database_, &cache_) {
+      matcher_(match_options, &database_, &cache_, thread_factory) {
   CHECK(options_.Check());
   CHECK(match_options_.Check());
 }
@@ -974,12 +976,13 @@ void VocabTreeFeatureMatcher::Run() {
 
 SpatialFeatureMatcher::SpatialFeatureMatcher(
     const SpatialMatchingOptions& options,
-    const SiftMatchingOptions& match_options, const std::string& database_path)
+    const SiftMatchingOptions& match_options, const std::string& database_path,
+    const FeatureMatcherThreadFactory* thread_factory)
     : options_(options),
       match_options_(match_options),
       database_(database_path),
       cache_(5 * options_.max_num_neighbors, &database_),
-      matcher_(match_options, &database_, &cache_) {
+      matcher_(match_options, &database_, &cache_, thread_factory) {
   CHECK(options_.Check());
   CHECK(match_options_.Check());
 }
@@ -1159,12 +1162,13 @@ void SpatialFeatureMatcher::Run() {
 
 TransitiveFeatureMatcher::TransitiveFeatureMatcher(
     const TransitiveMatchingOptions& options,
-    const SiftMatchingOptions& match_options, const std::string& database_path)
+    const SiftMatchingOptions& match_options, const std::string& database_path,
+    const FeatureMatcherThreadFactory* thread_factory)
     : options_(options),
       match_options_(match_options),
       database_(database_path),
       cache_(options_.batch_size, &database_),
-      matcher_(match_options, &database_, &cache_) {
+      matcher_(match_options, &database_, &cache_, thread_factory) {
   CHECK(options_.Check());
   CHECK(match_options_.Check());
 }
