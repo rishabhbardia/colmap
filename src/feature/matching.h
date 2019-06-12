@@ -354,7 +354,8 @@ class ExhaustiveFeatureMatcher : public Thread {
  public:
   ExhaustiveFeatureMatcher(const ExhaustiveMatchingOptions& options,
                            const SiftMatchingOptions& match_options,
-                           const std::string& database_path);
+                           const std::string& database_path,
+                           const FeatureMatcherThreadFactory* thread_factory);
 
  private:
   void Run() override;
@@ -410,7 +411,8 @@ class VocabTreeFeatureMatcher : public Thread {
  public:
   VocabTreeFeatureMatcher(const VocabTreeMatchingOptions& options,
                           const SiftMatchingOptions& match_options,
-                          const std::string& database_path);
+                          const std::string& database_path,
+                          const FeatureMatcherThreadFactory* thread_factory);
 
  private:
   void Run() override;
@@ -428,7 +430,8 @@ class SpatialFeatureMatcher : public Thread {
  public:
   SpatialFeatureMatcher(const SpatialMatchingOptions& options,
                         const SiftMatchingOptions& match_options,
-                        const std::string& database_path);
+                        const std::string& database_path,
+                        const FeatureMatcherThreadFactory* thread_factory);
 
  private:
   void Run() override;
@@ -448,7 +451,8 @@ class TransitiveFeatureMatcher : public Thread {
  public:
   TransitiveFeatureMatcher(const TransitiveMatchingOptions& options,
                            const SiftMatchingOptions& match_options,
-                           const std::string& database_path);
+                           const std::string& database_path,
+                           const FeatureMatcherThreadFactory* thread_factory);
 
  private:
   void Run() override;
